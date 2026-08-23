@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Repository {
+  id            String       @id @default(uuid())
+  owner         String
+  name          String
+  fullName      String       @unique
+  webhookSecret String?
+  tokenQuota    Int          @default(100000)
+  createdAt     DateTime     @default(now())
+  pullRequests  PullRequest[]
+  tokenUsages   TokenUsage[]
+}
+
+model PullRequest {
+  id          String     @id @default(uuid())
+  repositoryId String
+  repository  Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  prNumber    Int
+  title       String
+  author      String
+  branch      String
+  status      String     @default("OPEN") // OPEN, CLOSED, MERGED
+  createdAt   DateTime   @default(now())
+  auditRuns   AuditRun[]
+
+  @@unique([repositoryId, prNumber])
+}
+
+model AuditRun {
+  id            String      @id @default(uuid())
+  pullRequestId String
+  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  commitSha     String
+  status        String      @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  durationMs    Int         @default(0)
+  totalFindings Int         @default(0)
+  tokensUsed    Int         @default(0)
+  createdAt     DateTime    @default(now())
+  findings      Finding[]
+}
+
+model Finding {
+  id           String   @id @default(uuid())
+  auditRunId   String
+  auditRun     AuditRun @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
+  filePath     String
+  lineNumber   Int
+  diffPosition Int
+  severity     String   // CRITICAL, HIGH, MEDIUM, LOW
+  category     String   // SECURITY, PERFORMANCE, SYNTAX, BEST_PRACTICE
+  title        String
+  description  String
+  codeSnippet  String?
+  suggestedFix String?
+  createdAt    DateTime @default(now())
+}
+
+model TokenUsage {
+  id           String     @id @default(uuid())
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  tokensUsed   Int
+  requestCount Int        @default(1)
+  timestamp    DateTime   @default(now())
+}
+
+model WebhookLog {
+  id           String   @id @default(uuid())
+  event        String
+  action       String?
+  deliveryId   String   @unique
+  payload      String
+  status       String   // QUEUED, PROCESSED, REJECTED, FAILED
+  errorMessage String?
+  receivedAt   DateTime @default(now())
+}

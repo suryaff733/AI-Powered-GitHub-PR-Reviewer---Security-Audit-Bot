@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { enqueuePRAuditJob } from '@/lib/queue/queue';
+import '@/lib/queue/worker';
 import { inMemoryDb } from '@/lib/db';
 
 export async function POST(req: NextRequest) {

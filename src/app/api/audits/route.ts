@@ -27,7 +27,7 @@ export async function GET() {
       return NextResponse.json({
         audits: mapped,
         webhookLogs,
-        source: 'sqlite-prisma',
+        source: 'supabase-postgresql',
       });
     }
   } catch (err) {

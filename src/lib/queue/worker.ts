@@ -3,7 +3,7 @@ import { parseUnifiedDiff } from '../github/diff-parser';
 import { GitHubClient, InlineComment } from '../github/octokit';
 import { GeminiAuditor } from '../ai/gemini-auditor';
 import { RateLimiter } from '../rate-limiter';
-import { inMemoryDb } from '../db';
+import { inMemoryDb, prisma } from '../db';
 
 export async function processPRAuditJob(data: PRAuditJobData) {
   const repoFullName = `${data.owner}/${data.repo}`;
@@ -108,6 +108,67 @@ export async function processPRAuditJob(data: PRAuditJobData) {
       createdAt: new Date(),
     });
   });
+
+  // Also persist to Prisma SQLite database
+  try {
+    const dbRepo = await prisma.repository.upsert({
+      where: { fullName: repoFullName },
+      update: {},
+      create: {
+        owner: data.owner,
+        name: data.repo,
+        fullName: repoFullName,
+        tokenQuota: 500000,
+      },
+    });
+
+    const dbPr = await prisma.pullRequest.upsert({
+      where: {
+        repositoryId_prNumber: {
+          repositoryId: dbRepo.id,
+          prNumber: data.pullNumber,
+        },
+      },
+      update: {
+        title: data.prTitle,
+        author: data.author,
+        branch: data.branch,
+      },
+      create: {
+        repositoryId: dbRepo.id,
+        prNumber: data.pullNumber,
+        title: data.prTitle,
+        author: data.author,
+        branch: data.branch,
+      },
+    });
+
+    await prisma.auditRun.create({
+      data: {
+        pullRequestId: dbPr.id,
+        commitSha: data.commitSha,
+        status: 'COMPLETED',
+        durationMs: auditResult.durationMs,
+        totalFindings: auditResult.findings.length,
+        tokensUsed: auditResult.tokensUsed,
+        findings: {
+          create: auditResult.findings.map((f) => ({
+            filePath: f.filePath,
+            lineNumber: f.lineNumber,
+            diffPosition: f.diffPosition,
+            severity: f.severity,
+            category: f.category,
+            title: f.title,
+            description: f.description,
+            codeSnippet: f.codeSnippet || '',
+            suggestedFix: f.suggestedFix || '',
+          })),
+        },
+      },
+    });
+  } catch (dbErr) {
+    console.warn('[Worker] SQLite persistence fallback to inMemoryDb:', dbErr);
+  }
 
   // 7. Post inline review comments on GitHub
   const comments: InlineComment[] = auditResult.findings.map(f => {

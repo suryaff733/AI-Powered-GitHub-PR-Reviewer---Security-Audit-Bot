@@ -1,7 +1,39 @@
 import { NextResponse } from 'next/server';
-import { inMemoryDb } from '@/lib/db';
+import { prisma, inMemoryDb } from '@/lib/db';
 
 export async function GET() {
+  try {
+    const dbAudits = await prisma.auditRun.findMany({
+      include: {
+        pullRequest: {
+          include: {
+            repository: true,
+          },
+        },
+        findings: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (dbAudits.length > 0) {
+      const webhookLogs = Array.from(inMemoryDb.webhookLogs.values());
+      const mapped = dbAudits.map(audit => ({
+        ...audit,
+        pullRequest: audit.pullRequest || null,
+        repository: audit.pullRequest?.repository || null,
+        findings: audit.findings || [],
+      }));
+
+      return NextResponse.json({
+        audits: mapped,
+        webhookLogs,
+        source: 'sqlite-prisma',
+      });
+    }
+  } catch (err) {
+    console.warn('[Audits API] Fallback to in-memory store:', err);
+  }
+
   const auditRuns = Array.from(inMemoryDb.auditRuns.values());
   const pullRequests = inMemoryDb.pullRequests;
   const repositories = inMemoryDb.repositories;
@@ -24,5 +56,6 @@ export async function GET() {
   return NextResponse.json({
     audits: fullAudits,
     webhookLogs,
+    source: 'in-memory',
   });
 }

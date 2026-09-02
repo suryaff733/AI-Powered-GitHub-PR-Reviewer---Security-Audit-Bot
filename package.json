@@ -10,7 +10,8 @@
     "worker": "tsx src/lib/queue/standalone-worker.ts",
     "test:audit": "tsx src/scripts/test-audit-pipeline.ts",
     "prisma:generate": "prisma generate",
-    "prisma:push": "prisma db push"
+    "prisma:push": "prisma db push",
+    "db:seed": "tsx src/scripts/seed-db.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
@@ -37,6 +38,7 @@
     "prisma": "^5.21.0",
     "tailwindcss": "^3.4.14",
     "ts-node": "^10.9.2",
+    "tsx": "^4.23.13",
     "typescript": "^5.6.3"
   }
 }

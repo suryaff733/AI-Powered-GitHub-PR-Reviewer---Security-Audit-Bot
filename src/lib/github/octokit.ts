@@ -66,22 +66,36 @@ export class GitHubClient {
       return { id: 9999, html_url: `https://github.com/${owner}/${repo}/pull/${pullNumber}` };
     }
 
-    const response = await this.octokit.pulls.createReview({
-      owner,
-      repo,
-      pull_number: pullNumber,
-      commit_id: commitSha,
-      event,
-      body,
-      comments: comments.map(c => ({
-        path: c.path,
-        line: c.line,
-        side: c.side || 'RIGHT',
-        body: c.body,
-      })),
-    });
-
-    return response.data;
+    try {
+      const response = await this.octokit.pulls.createReview({
+        owner,
+        repo,
+        pull_number: pullNumber,
+        commit_id: commitSha,
+        event,
+        body,
+        comments: comments.map(c => ({
+          path: c.path,
+          line: c.line,
+          side: c.side || 'RIGHT',
+          body: c.body,
+        })),
+      });
+      return response.data;
+    } catch (err: any) {
+      console.warn(`[GitHubClient] Failed to post review with inline comments (${err?.message}). Falling back to PR issue comment.`);
+      try {
+        const commentBody = `${body}\n\n### 📋 Detailed Findings:\n` + comments.map(c => c.body).join('\n\n---\n\n');
+        await this.octokit.issues.createComment({
+          owner,
+          repo,
+          issue_number: pullNumber,
+          body: commentBody,
+        });
+      } catch (commentErr: any) {
+        console.error(`[GitHubClient] Fallback PR comment also failed:`, commentErr?.message);
+      }
+    }
   }
 
   public async updateCommitStatus(
@@ -97,14 +111,18 @@ export class GitHubClient {
       return;
     }
 
-    await this.octokit.repos.createCommitStatus({
-      owner,
-      repo,
-      sha,
-      state,
-      context: 'AI Audit Bot / Security & Code Check',
-      description,
-      target_url: targetUrl,
-    });
+    try {
+      await this.octokit.repos.createCommitStatus({
+        owner,
+        repo,
+        sha,
+        state,
+        context: 'AI Audit Bot / Security & Code Check',
+        description,
+        target_url: targetUrl,
+      });
+    } catch (err: any) {
+      console.warn(`[GitHubClient] Commit status update skipped (${err?.message}). Continuing audit.`);
+    }
   }
 }
